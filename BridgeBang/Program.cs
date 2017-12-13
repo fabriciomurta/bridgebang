@@ -158,7 +158,7 @@ namespace BridgeBang
 @echo off
 if not exist ""$(SolutionDir)\" + References[0].Name + @"\bin\$(ConfigurationName)\" + References[0].Name + @".dll"" (
  echo ""Should build the sub-projects...""
- ""$(MSBuildToolsPath)\msbuild.exe"" /p:Configuration=""$(ConfigurationName)"" ""$(SolutionDir)\Scenario.sln""
+ ""$(MSBuildToolsPath)\msbuild.exe"" /p:Configuration=""$(ConfigurationName)"" ""$(SolutionDir)\SubProjectsOnly.sln""
 )
     </PreBuildEvent>
   </PropertyGroup> " : "") + @"
@@ -409,6 +409,10 @@ Generating project set: ");
             statiMasterProj.References.AddRange(csprojs);
             statiMasterProj.Dump(rootPath, masterBridgeVersion, false);
             File.WriteAllText(Path.Combine(rootPath, "StaticScenario.sln"), GetSln(new List<CsProj>() { statiMasterProj }));
+
+            // This solution will only have the subprojects. It is used to build all
+            // references if they are not while the static solution is built.
+            File.WriteAllText(Path.Combine(rootPath, "SubProjectsOnly.sln"), GetSln(csprojs));
 
             Console.WriteLine("done.");
         }
