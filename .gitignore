@@ -49,3 +49,6 @@ x64/
 
 # VS 2015
 /**/.vs
+
+# Ignore output scenarios
+scenarios/*

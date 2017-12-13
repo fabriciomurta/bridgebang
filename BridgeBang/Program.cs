@@ -406,16 +406,16 @@ Generating project set: ");
         static void Main(string[] args)
         {
             // Ok, simply to check against the manually created project.
-            //Generate("../Vanilla1", 1, "16.5.1", "16.5.1");
+            //Generate("../scenarios/Vanilla1", 1, "16.5.1", "16.5.1");
 
             // Ok, runs fine in current 16.5.1 branch (without any out-of-memory fixes).
-            //Generate("../Vanilla100", 100, "16.5.1", "16.5.1");
+            //Generate("../scenarios/Vanilla100", 100, "16.5.1", "16.5.1");
 
-            Generate("../Vanilla200", 200, "16.5.1", "16.5.1");
+            Generate("../scenarios/Vanilla200", 200, "16.5.1", "16.5.1");
 
             // Scenario 1: reference X assemblies where all are same version
-            //Generate("../Scenario1", 250, "16.4.1", "16.4.1");
-            //Generate("../Scenario2", 250, "16.5.0", "16.4.1");
+            //Generate("../scenarios/Scenario1", 250, "16.4.1", "16.4.1");
+            //Generate("../scenarios/Scenario2", 250, "16.5.0", "16.4.1");
         }
     }
 }
