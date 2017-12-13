@@ -31,7 +31,7 @@ namespace BridgeBang
             References = new List<CsProj>();
         }
 
-        public void Dump(string rootPath, string bridgeVersion)
+        public void Dump(string rootPath, string bridgeVersion, bool projectRefs = true)
         {
             var pjDir = Path.Combine(rootPath, Name);
             if (Directory.Exists(pjDir)) throw new Exception("Project directory '" + pjDir + "' already exists.");
@@ -39,7 +39,7 @@ namespace BridgeBang
             Directory.CreateDirectory(Path.Combine(rootPath, Name));
 
             File.WriteAllText(Path.Combine(rootPath, CsPath), GetCs());
-            File.WriteAllText(Path.Combine(rootPath, PjPath), GetCsProj(bridgeVersion));
+            File.WriteAllText(Path.Combine(rootPath, PjPath), GetCsProj(bridgeVersion, projectRefs));
 
 #if GITHUB
 #else
@@ -50,7 +50,7 @@ namespace BridgeBang
 #endif
         }
 
-        string GetCsProj(string bridgeVersion)
+        string GetCsProj(string bridgeVersion, bool projectRefs)
         {
 #if GITHUB
             return @"<Project Sdk=""Microsoft.NET.Sdk"">
@@ -81,6 +81,8 @@ namespace BridgeBang
 #else
             var bridge_ver_fields = bridgeVersion.Split('.');
             var bridge_major_version = bridge_ver_fields[0] + "." + bridge_ver_fields[1] + ".0";
+            var shouldpjref = projectRefs && References.Count > 0;
+            var shoulddllref = !projectRefs && References.Count > 0;
 
             return @"<?xml version=""1.0"" encoding=""utf-8""?>
 <Project ToolsVersion=""15.0"" xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">
@@ -123,7 +125,10 @@ namespace BridgeBang
     </Reference>
     <Reference Include=""Bridge.Html5, Version=" + bridge_major_version + @".0, Culture=neutral, processorArchitecture=MSIL"">
       <HintPath>..\packages\Bridge.Html5." + bridgeVersion + @"\lib\net40\Bridge.Html5.dll</HintPath>
-    </Reference>
+    </Reference>" + (shoulddllref ? string.Join("", References.Select( r => @"
+    <Reference Include=""" + r.Name + @""">
+      <HintPath>..\" + r.Name + @"\bin\Debug\" + r.Name + @".dll</HintPath>
+    </Reference>")) : "") + @"
   </ItemGroup>
   <ItemGroup>
     <Compile Include=""Class1.cs"" />
@@ -132,11 +137,11 @@ namespace BridgeBang
   <ItemGroup>
     <None Include=""bridge.json"" />
     <None Include=""packages.config"" />
-  </ItemGroup>" + (References.Count > 0 ? @"
-  <ItemGroup>" + string.Join("", References.Select(p => @"
-    <ProjectReference Include=""..\" + p.PjPath + @""">
-      <Project>{" + p.Guid.ToString() + @"}</Project>
-      <Name>" + p.Name + @"</Name>
+  </ItemGroup>" + (shouldpjref ? @"
+  <ItemGroup>" + string.Join("", References.Select(r => @"
+    <ProjectReference Include=""..\" + r.PjPath + @""">
+      <Project>{" + r.Guid.ToString() + @"}</Project>
+      <Name>" + r.Name + @"</Name>
     </ProjectReference>")) + @"
   </ItemGroup>" : "") + @"
   <Import Project=""$(MSBuildToolsPath)\Microsoft.CSharp.targets"" />
@@ -386,6 +391,15 @@ Generating project set: ");
             solution.Add(masterProj);
 
             File.WriteAllText(Path.Combine(rootPath, "Scenario.sln"), GetSln(solution));
+
+            // This project will link to the built DLLs, so that we don't require
+            // rebuilding everything all the time. Should first build the 'Scenario.sln'
+            // once, before this will work.
+            var statiMasterProj = new CsProj("StaticMain");
+            statiMasterProj.References.AddRange(csprojs);
+            statiMasterProj.Dump(rootPath, masterBridgeVersion, false);
+            File.WriteAllText(Path.Combine(rootPath, "StaticScenario.sln"), GetSln(new List<CsProj>() { statiMasterProj }));
+
             Console.WriteLine("done.");
         }
 
