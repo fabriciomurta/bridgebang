@@ -425,7 +425,7 @@ Generating project set: ");
             // Ok, runs fine in current 16.5.1 branch (without any out-of-memory fixes).
             //Generate("../scenarios/Vanilla100", 100, "16.5.1", "16.5.1");
 
-            Generate("../scenarios/Vanilla200", 200, "16.5.1", "16.5.1");
+            Generate("../scenarios/Vanilla250", 250, "16.5.1", "16.5.1");
 
             // Scenario 1: reference X assemblies where all are same version
             //Generate("../scenarios/Scenario1", 250, "16.4.1", "16.4.1");
