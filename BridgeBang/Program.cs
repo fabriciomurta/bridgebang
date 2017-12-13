@@ -151,7 +151,17 @@ namespace BridgeBang
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition=""!Exists('..\packages\Bridge.Min." + bridgeVersion + @"\build\Bridge.Min.targets')"" Text=""$([System.String]::Format('$(ErrorText)', '..\packages\Bridge.Min." + bridgeVersion + @"\build\Bridge.Min.targets'))"" />
-  </Target>
+  </Target>" + (shoulddllref ? @"
+  <PropertyGroup>
+    <PreBuildEvent>
+@rem post-build event commandline.
+@echo off
+if not exist ""$(SolutionDir)\" + References[0].Name + @"\bin\$(ConfigurationName)\" + References[0].Name + @".dll"" (
+ echo ""Should build the sub-projects...""
+ ""$(MSBuildToolsPath)\msbuild.exe"" /p:Configuration=""$(ConfigurationName)"" ""$(SolutionDir)\Scenario.sln""
+)
+    </PreBuildEvent>
+  </PropertyGroup> " : "") + @"
 </Project>
 ";
 #endif
