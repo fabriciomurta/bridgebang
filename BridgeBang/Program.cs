@@ -6,22 +6,66 @@ using System.Text;
 
 namespace BridgeBang
 {
-    class Program
+    public class CsProj
     {
-        static string GetCsProj(string bridgeVersion, List<string> projectReferences)
+        public string Name { get; }
+        public string PjPath { get; }
+        public string CsPath { get; }
+        public Guid Guid { get; }
+        public string GuidUC { get; }
+        public string GuidLC { get; }
+        public List<CsProj> References { get; }
+
+        public CsProj(string name)
         {
+            Name = name;
+            PjPath = Path.Combine(name, name + ".csproj");
+#if GITHUB
+            CsPath = Path.Combine(name, name + ".cs");
+#else
+            CsPath = Path.Combine(name, "Class1.cs");
+#endif
+            Guid = Guid.NewGuid();
+            GuidUC = Guid.ToString().ToUpperInvariant();
+            GuidLC = Guid.ToString();
+            References = new List<CsProj>();
+        }
+
+        public void Dump(string rootPath, string bridgeVersion)
+        {
+            var pjDir = Path.Combine(rootPath, Name);
+            if (Directory.Exists(pjDir)) throw new Exception("Project directory '" + pjDir + "' already exists.");
+
+            Directory.CreateDirectory(Path.Combine(rootPath, Name));
+
+            File.WriteAllText(Path.Combine(rootPath, CsPath), GetCs());
+            File.WriteAllText(Path.Combine(rootPath, PjPath), GetCsProj(bridgeVersion));
+
+#if GITHUB
+#else
+            Directory.CreateDirectory(Path.Combine(pjDir, "Properties"));
+            File.WriteAllText(Path.Combine(pjDir, "Properties", "AssemblyInfo.cs"), GetAsmi());
+            File.WriteAllText(Path.Combine(pjDir, "bridge.json"), GetBridgeJson());
+            File.WriteAllText(Path.Combine(pjDir, "packages.config"), GetPkgConfig(bridgeVersion));
+#endif
+        }
+
+        string GetCsProj(string bridgeVersion)
+        {
+#if GITHUB
             return @"<Project Sdk=""Microsoft.NET.Sdk"">
   <PropertyGroup>
-    <TargetFramework>net47</TargetFramework>
+    <TargetFramework>net40</TargetFramework>
     <NoStdLib>true</NoStdLib>
     <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <PackagesDir>..\packages</PackagesDir>
   </PropertyGroup>
 " + (projectReferences.Count > 0 ?
 @"  <ItemGroup>
 " + string.Join("", projectReferences.Select(p =>
 
-@"    <ProjectReference Include=""../" + p + @""" />
+@"    <ProjectReference Include=""../" + p.Name + @""" />
 ")) + 
 @"  </ItemGroup>" : "") + 
 @"
@@ -34,24 +78,219 @@ namespace BridgeBang
     </PackageReference>
   </ItemGroup>
 </Project>";
+#else
+            var bridge_ver_fields = bridgeVersion.Split('.');
+            var bridge_major_version = bridge_ver_fields[0] + "." + bridge_ver_fields[1] + ".0";
+
+            return @"<?xml version=""1.0"" encoding=""utf-8""?>
+<Project ToolsVersion=""15.0"" xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">
+  <Import Project=""$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props"" Condition=""Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')"" />
+  <PropertyGroup>
+    <Configuration Condition="" '$(Configuration)' == '' "">Debug</Configuration>
+    <Platform Condition="" '$(Platform)' == '' "">AnyCPU</Platform>
+    <ProjectGuid>{" + GuidUC + @"}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>" + Name + @"</RootNamespace>
+    <AssemblyName>" + Name + @"</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+  </PropertyGroup>
+  <PropertyGroup Condition="" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' "">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <NoStdLib>true</NoStdLib>
+  </PropertyGroup>
+  <PropertyGroup Condition="" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' "">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <NoStdLib>true</NoStdLib>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include=""Bridge, Version=" + bridge_major_version + @".0, Culture=neutral, processorArchitecture=MSIL"">
+      <HintPath>..\packages\Bridge.Core." + bridgeVersion + @"\lib\net40\Bridge.dll</HintPath>
+    </Reference>
+    <Reference Include=""Bridge.Html5, Version=" + bridge_major_version + @".0, Culture=neutral, processorArchitecture=MSIL"">
+      <HintPath>..\packages\Bridge.Html5." + bridgeVersion + @"\lib\net40\Bridge.Html5.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include=""Class1.cs"" />
+    <Compile Include=""Properties\AssemblyInfo.cs"" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include=""bridge.json"" />
+    <None Include=""packages.config"" />
+  </ItemGroup>" + (References.Count > 0 ? @"
+  <ItemGroup>" + string.Join("", References.Select(p => @"
+    <ProjectReference Include=""..\" + p.PjPath + @""">
+      <Project>{" + p.Guid.ToString() + @"}</Project>
+      <Name>" + p.Name + @"</Name>
+    </ProjectReference>")) + @"
+  </ItemGroup>" : "") + @"
+  <Import Project=""$(MSBuildToolsPath)\Microsoft.CSharp.targets"" />
+  <Import Project=""..\packages\Bridge.Min." + bridgeVersion + @"\build\Bridge.Min.targets"" Condition=""Exists('..\packages\Bridge.Min." + bridgeVersion + @"\build\Bridge.Min.targets')"" />
+  <Target Name=""EnsureNuGetPackageBuildImports"" BeforeTargets=""PrepareForBuild"">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition=""!Exists('..\packages\Bridge.Min." + bridgeVersion + @"\build\Bridge.Min.targets')"" Text=""$([System.String]::Format('$(ErrorText)', '..\packages\Bridge.Min." + bridgeVersion + @"\build\Bridge.Min.targets'))"" />
+  </Target>
+</Project>
+";
+#endif
         }
 
-        static string GetCs(string postfix)
+        string GetCs()
         {
-            return @"namespace Namespace" + postfix + "{ public class Type" + postfix + " { }}";
+#if GITHUB
+            return @"namespace Namespace" + Name + "{ public class Type" + Name + " { }}";
+#else
+            return @"namespace " + Name + @"
+{
+    public class Class1
+    {" + (References.Count > 0 ? string.Join("", References.Select(r => @"
+        public " + r.Name + ".Class1 Prop" + r.Name + @" { get; set; }")) : "") + @"
+    }
+}";
+#endif
         }
 
-        static string GetSln(List<string> csprojs)
+        string GetAsmi()
         {
-            var projects = csprojs.Select(csproj => new { FileName = csproj, Name = Path.GetFileNameWithoutExtension(csproj), Guid = Guid.NewGuid() } );
+            return @"using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
+// General Information about an assembly is controlled through the following
+// set of attributes. Change these attribute values to modify the information
+// associated with an assembly.
+[assembly: AssemblyTitle(""" + Name + @""")]
+[assembly: AssemblyDescription("""")]
+[assembly: AssemblyConfiguration("""")]
+[assembly: AssemblyCompany("""")]
+[assembly: AssemblyProduct(""" + Name + @""")]
+[assembly: AssemblyCopyright(""Copyright ©  2017"")]
+[assembly: AssemblyTrademark("""")]
+[assembly: AssemblyCulture("""")]
+
+// Setting ComVisible to false makes the types in this assembly not visible
+// to COM components.  If you need to access a type in this assembly from
+// COM, set the ComVisible attribute to true on that type.
+[assembly: ComVisible(false)]
+
+// The following GUID is for the ID of the typelib if this project is exposed to COM
+[assembly: Guid(""" + GuidLC + @""")]
+
+// Version information for an assembly consists of the following four values:
+//
+//      Major Version
+//      Minor Version
+//      Build Number
+//      Revision
+//
+// You can specify all the values or you can default the Build and Revision Numbers
+// by using the '*' as shown below:
+// [assembly: AssemblyVersion(""1.0.*"")]
+[assembly: AssemblyVersion(""1.0.0.0"")]
+[assembly: AssemblyFileVersion(""1.0.0.0"")]";
+        }
+
+        static string GetBridgeJson()
+        {
+            return @"// See all bridge.json configuration options at:
+// https://github.com/bridgedotnet/Bridge/wiki/global-configuration
+
+{
+  // The folder to output JavaScript (.js) files.
+  ""output"": ""$(OutDir)/bridge/"",
+
+  // Set to ""Minified"" to generate .min.js files.
+  // Set to ""Both"" to generate both minified and non-minified .js files.
+  // ""Formatted"" generates non-minified .js files.
+  ""outputFormatting"": ""Formatted"",
+
+  // Enable the Bridge Console.
+  // Default is false.
+  ""console"": {
+    ""enabled"": true
+  },
+
+  // Enable browser debugging of C# files.
+  // Default is false.
+  ""sourceMap"": {
+    ""enabled"": true
+  },
+
+  // Set to true to disable Reflection metadata generation.
+  // Default is false.
+  ""reflection"": {
+    ""disabled"": false
+  },
+
+  // Generate TypeScript Definition (.d.ts) files.
+  // Default is false.
+  ""generateTypeScript"": false,
+
+  // Delete everything from the output folder
+  // Default is false
+  ""cleanOutputFolderBeforeBuild"": false,
+
+  // Set to true to enable bridge.report.log generation.
+  // Default is false.
+  ""report"": {
+    ""enabled"": false
+  },
+
+  // Rules to manage generated JavaScript syntax.
+  // Default is ""Managed""
+  ""rules"": {
+    ""anonymousType"": ""Plain"",
+    ""arrayIndex"": ""Managed"",
+    ""autoProperty"": ""Plain"",
+    ""boxing"": ""Managed"",
+    ""integer"": ""Managed"",
+    ""lambda"": ""Plain""
+  }
+}
+";
+        }
+
+        static string GetPkgConfig(string version)
+        {
+            return @"<?xml version=""1.0"" encoding=""utf-8""?>
+<packages>
+  <package id=""Bridge"" version=""" + version + @""" targetFramework=""net40"" />
+  <package id=""Bridge.Core"" version=""" + version + @""" targetFramework=""net40"" />
+  <package id=""Bridge.Html5"" version=""" + version + @""" targetFramework=""net40"" />
+  <package id=""Bridge.Min"" version=""" + version + @""" targetFramework=""net40"" />
+</packages>";
+        }
+    }
+
+    class Program
+    {
+        public static string GetSln(List<CsProj> csprojs)
+        {
+#if GITHUB
             return @"Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
+\# Visual Studio 15
 VisualStudioVersion = 15.0.27004.2010
 MinimumVisualStudioVersion = 10.0.40219.1
-" + string.Join("", projects.Select(p => 
+" + string.Join("", csprojs.Select(p => 
 
-@"Project(""{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}"") = """ + p.Name + @""", """ + p.FileName + @""", ""{" + p.Guid.ToString().ToUpperInvariant() + @"}""
+@"Project(""{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}"") = """ + p.Name + @""", """ + p.PjPath + @""", ""{" + p.GuidUC + @"}""
 EndProject
 ")) +
 
@@ -63,10 +302,40 @@ EndProject
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 " + string.Join("", projects.Select(p =>
 
-@"		{" + p.Guid.ToString().ToUpperInvariant() + @"}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{" + p.Guid.ToString().ToUpperInvariant() + @"}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{" + p.Guid.ToString().ToUpperInvariant() + @"}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{" + p.Guid.ToString().ToUpperInvariant() + @"}.Release|Any CPU.Build.0 = Release|Any CPU
+@"		{" + p.GuidUC + @"}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{" + p.GuidUC + @"}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{" + p.GuidUC + @"}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{" + p.GuidUC + @"}.Release|Any CPU.Build.0 = Release|Any CPU
+")) +
+@"	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal";
+#else
+            return @"
+Microsoft Visual Studio Solution File, Format Version 12.00
+\# Visual Studio 15
+VisualStudioVersion = 15.0.26403.7
+MinimumVisualStudioVersion = 10.0.40219.1
+" + string.Join("", csprojs.Select(p =>
+
+@"Project(""{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}"") = """ + p.Name + @""", """ + p.PjPath + @""", ""{" + p.GuidUC + @"}""
+EndProject
+")) +
+
+@"Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+" + string.Join("", csprojs.Select(p =>
+
+@"		{" + p.GuidUC + @"}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{" + p.GuidUC + @"}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{" + p.GuidUC + @"}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{" + p.GuidUC + @"}.Release|Any CPU.Build.0 = Release|Any CPU
 ")) +
 @"	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
@@ -74,48 +343,65 @@ EndProject
 	EndGlobalSection
 EndGlobal";
 
+#endif
         }
 
-        static void Generate(string rootPath, string masterBridgeVersion)
+        static void Generate(string rootPath, int count, string masterBridgeVersion, string secBridgeVersion)
         {
-            // Scenario 1: reference X assemblies where all are same version
-            var csprojs = new List<string>();
-            var masterCode = new StringBuilder();
-            masterCode.AppendLine("namespace Main { public class MainMain { ");
-            for (var i = 0; i < 250; i++)
+            if (Directory.Exists(rootPath))
             {
-                var id = "Project" + i.ToString();
-                var cs = GetCs(id);
-                var csproj = GetCsProj("16.4.1", new List<string>());
-
-                var csprojFile = Path.Combine(id, id + ".csproj");
-                var csFile = Path.Combine(id, id + ".cs");
-
-                Directory.CreateDirectory(Path.Combine(rootPath, id));
-
-                File.WriteAllText(Path.Combine(rootPath, csFile), cs);
-                File.WriteAllText(Path.Combine(rootPath, csprojFile), csproj);
-                csprojs.Add(csprojFile);
-                masterCode.AppendLine("  public Namespace" + id + ".Type" + id + " Property" + id + " { get; set; }");
+                Console.WriteLine("Directory '" + rootPath + "' already exists. Skipping.");
+                return;
             }
-            masterCode.AppendLine("}}");
 
-            var masterCsproj = GetCsProj(masterBridgeVersion, csprojs);
-            Directory.CreateDirectory(Path.Combine(rootPath, "Master"));
-            File.WriteAllText(Path.Combine(rootPath, "Master/Main.csproj"), masterCsproj);
-            File.WriteAllText(Path.Combine(rootPath, "Master/Main.cs"), masterCode.ToString());
+            Console.Write(@"Creating scenario: " + rootPath + @"
+ - Referenced projects: " + count + @"
+ - Main project's bridge version: " + masterBridgeVersion + @"
+ - Reference projects' bridge version: " + secBridgeVersion + @"
+Generating project set: ");
+            var csprojs = new List<CsProj>();
+            var masterCode = new StringBuilder();
+            masterCode.AppendLine(@"namespace Main
+{
+    public class Class1
+        {");
+            for (var i = 0; i < count; i++)
+            {
+                var project = new CsProj("Project" + i.ToString());
 
-            csprojs.Add("Master/Main.csproj");
+                var csprojFile = project.PjPath;
 
-            var sln = GetSln(csprojs);
-            File.WriteAllText(Path.Combine(rootPath, "Scenario.sln"), sln);
 
+                project.Dump(rootPath, secBridgeVersion);
+                csprojs.Add(project);
+            }
+            masterCode.AppendLine(@"    }
+}");
+
+            var masterProj = new CsProj("Main");
+            masterProj.References.AddRange(csprojs);
+            masterProj.Dump(rootPath, masterBridgeVersion);
+
+            var solution = new List<CsProj>(csprojs);
+            solution.Add(masterProj);
+
+            File.WriteAllText(Path.Combine(rootPath, "Scenario.sln"), GetSln(solution));
+            Console.WriteLine("done.");
         }
 
         static void Main(string[] args)
         {
-            Generate("../Scenario1", "16.4.1");
-            Generate("../Scenario2", "16.5.0");
+            // Ok, simply to check against the manually created project.
+            //Generate("../Vanilla1", 1, "16.5.1", "16.5.1");
+
+            // Ok, runs fine in current 16.5.1 branch (without any out-of-memory fixes).
+            //Generate("../Vanilla100", 100, "16.5.1", "16.5.1");
+
+            Generate("../Vanilla200", 200, "16.5.1", "16.5.1");
+
+            // Scenario 1: reference X assemblies where all are same version
+            //Generate("../Scenario1", 250, "16.4.1", "16.4.1");
+            //Generate("../Scenario2", 250, "16.5.0", "16.4.1");
         }
     }
 }
